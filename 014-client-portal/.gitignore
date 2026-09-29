@@ -10,3 +10,5 @@ playwright-report/
 .env.*
 !.env.example
 coverage/
+.tmp/
+.e2e-data*/

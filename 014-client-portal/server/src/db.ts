@@ -11,8 +11,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 function migrationsDir(): string {
   // dev(tsx): server/src -> server/migrations, build: dist/server -> server/migrations (copied)
   const candidates = [
-    path.resolve(here, '../migrations'),
-    path.resolve(here, '../../server/migrations'),
+    path.resolve(here, '../migrations'), // server/src (tsx)
+    path.resolve(here, '../../../server/migrations'), // dist/server/src (build)
+    path.resolve(process.cwd(), 'server/migrations'),
   ];
   for (const c of candidates) if (fs.existsSync(c)) return c;
   throw new Error('migrations directory not found');

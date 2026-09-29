@@ -13,7 +13,11 @@ import { autoTransition, setProjectStatus } from './projectState.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export function sampleAssetDir(): string {
-  const candidates = [path.resolve(here, '../../assets/sample'), path.resolve(here, '../../../server/assets/sample')];
+  const candidates = [
+    path.resolve(here, '../../assets/sample'), // server/src/services (tsx)
+    path.resolve(here, '../../../../server/assets/sample'), // dist/server/src/services (build)
+    path.resolve(process.cwd(), 'server/assets/sample'),
+  ];
   for (const c of candidates) if (fs.existsSync(c)) return c;
   throw new Error('sample assets not found');
 }
