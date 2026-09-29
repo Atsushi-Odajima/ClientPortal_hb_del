@@ -18,7 +18,9 @@
     "demo": "npm run build:web && tsx scripts/demo.ts",
     "gc-orphans": "node dist/scripts/gc-orphans.js",
     "loadtest": "tsx scripts/loadtest.ts",
-    "test:all": "npm run typecheck && npm test && npm run build && npm run test:e2e"
+    "test:all": "npm run typecheck && npm test && npm run build && npm run test:e2e",
+    "purge-audit": "node dist/scripts/purge-audit.js",
+    "notices": "node scripts/gen-notices.mjs"
   },
   "author": "",
   "license": "UNLICENSED",

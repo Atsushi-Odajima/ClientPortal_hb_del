@@ -1,7 +1,20 @@
-次にやること（セッションが切れた場合はここから再開）
-1. web/ に React フロントエンドを実装（運営者/顧客/招待/PWA）
-2. Playwright E2E（7シナリオ、モバイルエミュレーション）
-3. 負荷試験スクリプト（scripts/loadtest.ts）
-4. S3互換ドライバのテスト（s3rver）
-5. 残りの開発資料・購入者向け資料
-確認コマンド: cd 014-client-portal && npm ci && npm test
+NEXT_STEPS（セッションが切れた場合はここから再開）
+==================================================
+状態: 実装・自動テスト・資料は完了。残りは人間による実機確認・実デプロイ等（RELEASE_CHECKLIST.md の B）。
+
+再開時の確認コマンド
+  cd 014-client-portal && npm ci && npm run test:all
+
+人間の確認が必要（開発環境では不可）
+  1. 実機 iPhone Safari / PWA / Android Chrome での主要操作（HEIC・MOV・PDF・ZIP保存を含む）
+  2. docker build / docker compose + Caddy の実起動
+  3. Fly.io 東京へのテストデプロイ（有料）
+  4. 実R2バケット・実SMTPでの動作
+  5. OPERATING_COSTS.md の[未検証]単価の確認
+  結果は TEST_REPORT.md §4 と RELEASE_CHECKLIST.md を更新する。
+
+将来候補（今回の範囲外。勝手に追加しない）
+  - R2 への署名付き直接マルチパートアップロード（GB級動画向け）
+  - ZIP の非同期生成
+  - 複数スタッフ権限、2要素認証、ウイルススキャン連携、Push通知
+  - PostgreSQL 対応（複数インスタンス化が必要になった場合）
