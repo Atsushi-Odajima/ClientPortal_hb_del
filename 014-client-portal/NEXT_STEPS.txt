@@ -1,0 +1,7 @@
+次にやること（セッションが切れた場合はここから再開）
+1. web/ に React フロントエンドを実装（運営者/顧客/招待/PWA）
+2. Playwright E2E（7シナリオ、モバイルエミュレーション）
+3. 負荷試験スクリプト（scripts/loadtest.ts）
+4. S3互換ドライバのテスト（s3rver）
+5. 残りの開発資料・購入者向け資料
+確認コマンド: cd 014-client-portal && npm ci && npm test
