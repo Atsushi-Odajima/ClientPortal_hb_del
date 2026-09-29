@@ -17,7 +17,11 @@ export default function PortalApp() {
   const [err, setErr] = useState<ApiError | null>(null);
   const [unread, setUnread] = useState(0);
   useEffect(() => {
-    get<Me>('/api/portal/me').then(setMe, setErr);
+    const load = () => get<Me>('/api/portal/me').then((m) => (setMe(m), setErr(null)), setErr);
+    load();
+    // オフラインで開いた場合は再接続時に自動で読み込み直す
+    window.addEventListener('online', load);
+    return () => window.removeEventListener('online', load);
   }, []);
   useEffect(() => {
     if (!me) return;
@@ -31,7 +35,13 @@ export default function PortalApp() {
       <div className="center-page">
         <div className="card">
           <h1>ページを開けません</h1>
-          <p>{err.status === 401 ? '招待リンクから開いてください。リンクの期限が切れている場合は担当者に再発行をご依頼ください。' : err.message}</p>
+          <p>
+            {err.status === 401
+              ? '招待リンクから開いてください。リンクの期限が切れている場合は担当者に再発行をご依頼ください。'
+              : err.status === 0
+                ? '通信できないため読み込めませんでした。電波の良い場所で再度お試しください（接続が戻ると自動で再読み込みします）。'
+                : err.message}
+          </p>
           <Link className="btn block" to="/portal/login">
             開けない場合
           </Link>

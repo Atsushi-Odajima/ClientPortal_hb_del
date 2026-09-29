@@ -85,7 +85,8 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
     global: true,
     max: 600,
     timeWindow: '1 minute',
-    allowList: cfg.env === 'test' ? () => true : undefined,
+    // テスト・E2E用。本番（NODE_ENV=production）では無効化できない
+    allowList: cfg.env === 'test' || (cfg.env !== 'production' && process.env.DISABLE_RATE_LIMIT === 'true') ? () => true : undefined,
   });
 
   app.addContentTypeParser('application/octet-stream', (_req, payload, done) => done(null, payload));

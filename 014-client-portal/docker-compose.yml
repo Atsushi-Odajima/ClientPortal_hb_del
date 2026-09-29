@@ -1,0 +1,29 @@
+# 国内VPS等で Docker を使う場合の例。HTTPS 化はリバースプロキシ（Caddy）で行う。
+# 1) .env.example を .env にコピーして値を設定  2) docker compose up -d
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      DATA_DIR: /data
+      TRUST_PROXY: "true"
+    volumes:
+      - portal-data:/data
+      - ./backups:/backups
+    expose:
+      - "8080"
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    command: caddy reverse-proxy --from ${DOMAIN:?DOMAIN を .env に設定してください} --to app:8080
+    volumes:
+      - caddy-data:/data
+volumes:
+  portal-data:
+  caddy-data:

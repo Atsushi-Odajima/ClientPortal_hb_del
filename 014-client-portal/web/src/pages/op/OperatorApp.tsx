@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { ApiError, get, post } from '../../api';
-import { Loading } from '../../components/ui';
+import { ErrorBox, Loading } from '../../components/ui';
 import { Dashboard } from './Dashboard';
 import { ProjectList } from './Projects';
 import { ProjectDetail } from './ProjectDetail';
@@ -23,10 +23,19 @@ export default function OperatorApp() {
   const [unread, setUnread] = useState(0);
   const [q, setQ] = useState('');
   const nav = useNavigate();
+  const [loadErr, setLoadErr] = useState<ApiError | null>(null);
   useEffect(() => {
-    get<OpMe>('/api/auth/me').then(setMe, (e: ApiError) => {
-      if (e.status === 401) nav('/login', { replace: true });
-    });
+    const load = () =>
+      get<OpMe>('/api/auth/me').then(
+        (m) => (setMe(m), setLoadErr(null)),
+        (e: ApiError) => {
+          if (e.status === 401) nav('/login', { replace: true });
+          else setLoadErr(e);
+        },
+      );
+    load();
+    window.addEventListener('online', load);
+    return () => window.removeEventListener('online', load);
   }, [nav]);
   useEffect(() => {
     if (!me) return;
@@ -39,6 +48,7 @@ export default function OperatorApp() {
       window.removeEventListener('cp:notifications', load);
     };
   }, [me]);
+  if (!me && loadErr) return <div className="center-page"><ErrorBox error={loadErr} onRetry={() => location.reload()} /></div>;
   if (!me) return <Loading />;
   const navItems = [
     { to: '/app', ico: '🏠', label: 'ホーム', end: true },
