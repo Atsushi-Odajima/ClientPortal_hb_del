@@ -14,7 +14,11 @@
     "test:e2e": "playwright test",
     "backup": "node dist/scripts/backup.js",
     "restore": "node dist/scripts/restore.js",
-    "create-operator": "node dist/scripts/create-operator.js"
+    "create-operator": "node dist/scripts/create-operator.js",
+    "demo": "npm run build:web && tsx scripts/demo.ts",
+    "gc-orphans": "node dist/scripts/gc-orphans.js",
+    "loadtest": "tsx scripts/loadtest.ts",
+    "test:all": "npm run typecheck && npm test && npm run build && npm run test:e2e"
   },
   "author": "",
   "license": "UNLICENSED",
