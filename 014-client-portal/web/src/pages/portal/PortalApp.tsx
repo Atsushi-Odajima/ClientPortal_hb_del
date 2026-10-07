@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, api, get, newIdempotencyKey, post } from '../../api';
 import { AsyncButton, Empty, ErrorBox, Loading, Modal, Page, StatusBadge, fmtDate, fmtSize, isOverdue, useApi, useOnline, useTitle, useToast } from '../../components/ui';
 import { Uploader } from '../../components/Uploader';
 import { ReviewPanel, type CommentDto, type DeliverableDto, type VersionDto } from '../../components/Review';
 import { PortalHelp } from './PortalHelp';
+import { SelectList, SelectPage } from './PortalSelect';
+import { CorrectionSheetPage } from '../../components/CorrectionSheet';
 
 interface Me {
   client: { id: string; companyName: string; contactName: string; email: string };
@@ -151,6 +153,9 @@ function ProjectShell({ me, unread }: { me: Me; unread: number }) {
         <Route path="requests" element={<Requests pid={pid!} />} />
         <Route path="review" element={<ReviewList pid={pid!} />} />
         <Route path="review/:did" element={<ReviewPage pid={pid!} />} />
+        <Route path="review/:did/sheet/:vid" element={<PortalSheet pid={pid!} />} />
+        <Route path="select" element={<SelectList pid={pid!} />} />
+        <Route path="select/:sid" element={<SelectPage pid={pid!} />} />
         <Route path="deliveries" element={<Deliveries pid={pid!} />} />
         <Route path="activity" element={<Activity pid={pid!} />} />
       </Routes>
@@ -163,6 +168,7 @@ interface Todo {
   reviews: { deliverableId: string; title: string; versionId: string; versionNumber: number; reviewDueDate: string | null; overdue: boolean }[];
   deliverables: { total: number; approved: number };
   deliveries: { id: string; title: string; publishedAt: string; expiresAt: string | null; expired: boolean; downloaded: boolean }[];
+  selections: { id: string; title: string; submitted: boolean }[];
 }
 
 function ProjectHome({ pid, me }: { pid: string; me: Me }) {
@@ -172,7 +178,8 @@ function ProjectHome({ pid, me }: { pid: string; me: Me }) {
     <Page state={st}>
       {({ project, todo }) => {
         const pendingDeliveries = todo.deliveries.filter((d) => !d.downloaded && !d.expired);
-        const nothing = todo.requests.toSubmit.length === 0 && todo.reviews.length === 0 && pendingDeliveries.length === 0;
+        const pendingSelections = todo.selections.filter((x) => !x.submitted);
+        const nothing = todo.requests.toSubmit.length === 0 && todo.reviews.length === 0 && pendingDeliveries.length === 0 && pendingSelections.length === 0;
         return (
           <div className="stack">
             <div>
@@ -214,6 +221,15 @@ function ProjectHome({ pid, me }: { pid: string; me: Me }) {
                 </ul>
               </Link>
             )}
+            {pendingSelections.map((x) => (
+              <Link key={x.id} to={`/portal/p/${pid}/select/${x.id}`} className="card link highlight" data-testid="todo-selection">
+                <div className="row between">
+                  <strong>📷 写真を選んでください: {x.title}</strong>
+                  <span className="chev" />
+                </div>
+                <div className="muted small">写真をタップするか、番号（例: 001, 007）で選んで送信してください</div>
+              </Link>
+            ))}
             {pendingDeliveries.map((d) => (
               <Link key={d.id} to={`/portal/p/${pid}/deliveries`} className="card link highlight">
                 <div className="row between">
@@ -223,6 +239,11 @@ function ProjectHome({ pid, me }: { pid: string; me: Me }) {
                 {d.expiresAt && <div className="muted small">ダウンロード期限 {fmtDate(d.expiresAt)}</div>}
               </Link>
             ))}
+            {todo.selections.length > 0 && pendingSelections.length === 0 && (
+              <Link to={`/portal/p/${pid}/select`} className="btn small">
+                📷 写真セレクト（送信済みの確認・変更）
+              </Link>
+            )}
             <h2>進み具合</h2>
             <div className="grid cols-2">
               <div className="card">
@@ -491,6 +512,7 @@ function ReviewPage({ pid }: { pid: string }) {
               selectedId={selected}
               onSelect={setSel}
               onChanged={st.reload}
+              sheetPath={(vid, cr) => `/portal/p/${pid}/review/${did}/sheet/${vid}${cr ? `?cr=${encodeURIComponent(cr)}` : ''}`}
               actions={(v) =>
                 v.isLatest ? (
                   <div className="card">
@@ -532,6 +554,7 @@ function ReviewPage({ pid }: { pid: string }) {
                 version={changeFor}
                 title={d.deliverable.title}
                 pinCount={(d.comments[changeFor.id] ?? []).filter((c) => c.pin && !c.resolved && !c.deleted).length}
+                sheetPath={`/portal/p/${pid}/review/${did}/sheet/${changeFor.id}`}
                 onClose={() => setChangeFor(null)}
                 onDone={() => (setChangeFor(null), st.reload())}
               />
@@ -596,7 +619,23 @@ function ApproveModal({ pid, deliverable, version, onClose, onDone }: { pid: str
   );
 }
 
-function ChangeModal({ pid, version, title, pinCount, onClose, onDone }: { pid: string; version: VersionDto; title: string; pinCount: number; onClose: () => void; onDone: () => void }) {
+function ChangeModal({
+  pid,
+  version,
+  title,
+  pinCount,
+  sheetPath,
+  onClose,
+  onDone,
+}: {
+  pid: string;
+  version: VersionDto;
+  title: string;
+  pinCount: number;
+  sheetPath: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -605,7 +644,16 @@ function ChangeModal({ pid, version, title, pinCount, onClose, onDone }: { pid: 
       <p className="small">
         対象: <strong>{title} v{version.versionNumber}</strong>
       </p>
-      {pinCount > 0 && <div className="alert small">画像上のピンコメント（未解決 {pinCount}件）も一緒に担当者へ伝わります。</div>}
+      {pinCount > 0 && (
+        <div className="alert small">
+          画像上のピンコメント（未解決 {pinCount}件）も「修正指示書」として一緒に担当者へ伝わります。
+          <div style={{ marginTop: 6 }}>
+            <Link className="btn small" to={sheetPath}>
+              📝 修正指示書を確認
+            </Link>
+          </div>
+        </div>
+      )}
       <label className="field">
         <span>修正してほしい内容</span>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="例: 文字をもう少し大きく、ロゴを右下へ" data-testid="change-body" />
@@ -793,4 +841,11 @@ function Notifications({ onRead }: { onRead: () => void }) {
       )}
     </div>
   );
+}
+
+/** Client Portal 修正指示: 修正指示書（顧客） */
+function PortalSheet({ pid }: { pid: string }) {
+  const { did, vid } = useParams();
+  const [sp] = useSearchParams();
+  return <CorrectionSheetPage base={`/api/portal/projects/${pid}`} versionId={vid!} changeRequestId={sp.get('cr')} backTo={`/portal/p/${pid}/review/${did}`} />;
 }

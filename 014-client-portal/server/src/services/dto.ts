@@ -121,8 +121,8 @@ export function versionDto(db: DB, v: VersionRow, audience: Audience, latestNumb
   const approvals = db.prepare('SELECT * FROM approvals WHERE version_id = ? ORDER BY approved_at').all(v.id) as ApprovalRow[];
   const active = approvals.find((a) => !a.revoked_at) ?? null;
   const changeRequests = db
-    .prepare('SELECT id, client_name, body, created_at FROM change_requests WHERE version_id = ? ORDER BY created_at')
-    .all(v.id) as { id: string; client_name: string; body: string; created_at: string }[];
+    .prepare('SELECT id, client_name, body, pin_comment_ids_json, created_at FROM change_requests WHERE version_id = ? ORDER BY created_at')
+    .all(v.id) as { id: string; client_name: string; body: string; pin_comment_ids_json: string; created_at: string }[];
   return {
     id: v.id,
     deliverableId: v.deliverable_id,
@@ -139,7 +139,7 @@ export function versionDto(db: DB, v: VersionRow, audience: Audience, latestNumb
     openCommentCount: counts.open ?? 0,
     approval: active ? approvalDto(active) : null,
     approvalHistory: approvals.map(approvalDto),
-    changeRequests: changeRequests.map((c) => ({ id: c.id, clientName: c.client_name, body: c.body, createdAt: c.created_at })),
+    changeRequests: changeRequests.map((c) => ({ id: c.id, clientName: c.client_name, body: c.body, pinCount: parseJsonArray(c.pin_comment_ids_json).length, createdAt: c.created_at })),
   };
 }
 

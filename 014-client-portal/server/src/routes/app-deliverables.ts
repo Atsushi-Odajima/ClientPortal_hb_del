@@ -7,6 +7,7 @@ import { conflict, newId, nowIso, patchSchema } from '../util.js';
 import { reqMeta } from './auth.js';
 import { opActor } from './app-projects.js';
 import { deliverableDto } from '../services/dto.js';
+import { PIN_TYPE_IDS } from '../../../shared/correctionSheet.js';
 import { createComment, deleteComment, editComment, listComments, resolveComment, revokeApproval } from '../services/review.js';
 
 const deliverableBody = z.object({
@@ -18,8 +19,12 @@ const deliverableBody = z.object({
 export const commentBody = z.object({
   body: z.string().max(4000),
   pin: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).nullable().optional(),
+  /** Client Portal 修正指示: ピンの指示タイプ（省略時は「変更」） */
+  pinType: z.enum(PIN_TYPE_IDS).nullable().optional(),
   parentId: z.string().max(40).nullable().optional(),
 });
+
+export const commentEditBody = z.object({ body: z.string().max(4000), pinType: z.enum(PIN_TYPE_IDS).optional() });
 
 export async function deliverableRoutes(app: FastifyInstance) {
   const ctx = app.ctx;
@@ -103,8 +108,8 @@ export async function deliverableRoutes(app: FastifyInstance) {
     const op = requireOperator(ctx, req);
     const { id, cid } = req.params as { id: string; cid: string };
     const p = ownedProject(db, op.id, id);
-    const b = z.object({ body: z.string().max(4000) }).parse(req.body);
-    editComment(ctx, p, cid, opActor(op), b.body, reqMeta(ctx, req));
+    const b = commentEditBody.parse(req.body);
+    editComment(ctx, p, cid, opActor(op), b.body, reqMeta(ctx, req), b.pinType);
     return { ok: true };
   });
 

@@ -16,12 +16,14 @@ import { objectKey } from '../storage/index.js';
 import { reqMeta } from './auth.js';
 import { fileDto } from '../services/dto.js';
 import { insertVersion } from '../services/review.js';
+import { addSelectionPhoto, assertSelectionAcceptsPhoto, selectionDisplayName } from '../services/selection.js';
 
 type Target =
   | { purpose: 'request_attachment'; requestId: string }
   | { purpose: 'deliverable_version'; deliverableId: string; note: string; checklist: string[]; reviewDueDate: string | null }
   | { purpose: 'delivery_extra'; deliveryId: string }
-  | { purpose: 'internal' };
+  | { purpose: 'internal' }
+  | { purpose: 'selection_photo'; setId: string };
 
 const initBase = z.object({
   name: z.string().min(1).max(255),
@@ -40,6 +42,7 @@ const operatorTarget = z.discriminatedUnion('purpose', [
   }),
   z.object({ purpose: z.literal('delivery_extra'), deliveryId: z.string().max(40) }),
   z.object({ purpose: z.literal('internal') }),
+  z.object({ purpose: z.literal('selection_photo'), setId: z.string().max(40) }),
 ]);
 
 interface UploadRow {
@@ -97,6 +100,10 @@ function validateTarget(ctx: Ctx, p: ProjectRow, actorType: 'operator' | 'client
     }
     case 'internal':
       if (actorType !== 'operator') throw new HttpError(403, 'forbidden', '許可されていません');
+      return;
+    case 'selection_photo':
+      if (actorType !== 'operator') throw new HttpError(403, 'forbidden', '許可されていません');
+      assertSelectionAcceptsPhoto(db, p.id, t.setId);
       return;
   }
 }
@@ -183,6 +190,18 @@ async function completeUpload(ctx: Ctx, up: UploadRow, p: ProjectRow, actor: Act
       throw badRequest(check.message, check.code);
     }
     validateTarget(ctx, p, actor.type, target);
+    if (target.purpose === 'selection_photo') {
+      // Client Portal 写真セレクト: 画像（JPEG/PNG/GIF/WebP）のみ・同じ写真の二重登録は不可
+      let reject: { code: string; message: string; status: number } | null = null;
+      if (check.previewKind !== 'image') reject = { status: 400, code: 'not_image', message: '写真セレクトには JPG / PNG / WEBP / GIF の画像のみ追加できます' };
+      else if (db.prepare(`SELECT 1 FROM selection_photos sp JOIN files f ON f.id = sp.file_id WHERE sp.set_id = ? AND f.sha256 = ?`).get(target.setId, sha256))
+        reject = { status: 409, code: 'duplicate_photo', message: '同じ写真がすでにこのセレクトにあります' };
+      if (reject) {
+        db.prepare(`UPDATE uploads SET status = 'failed', error_code = ? WHERE id = ?`).run(reject.code, up.id);
+        await fsp.rm(dir, { recursive: true, force: true });
+        throw new HttpError(reject.status, reject.code, reject.message);
+      }
+    }
     const fileId = newId('fil');
     key = objectKey(p.id, fileId);
     // 1) ストレージ保存が成功してから 2) DBへ記録。DB失敗時は実体を削除（提出済みレコードだけ残ることはない）
@@ -229,6 +248,8 @@ async function completeUpload(ctx: Ctx, up: UploadRow, p: ProjectRow, actor: Act
       } else if (target.purpose === 'delivery_extra') {
         const max = (db.prepare('SELECT COALESCE(MAX(sort_order), -1) m FROM delivery_items WHERE delivery_id = ?').get(target.deliveryId) as { m: number }).m;
         db.prepare('INSERT INTO delivery_items (id, delivery_id, file_id, label, sort_order) VALUES (?, ?, ?, ?, ?)').run(newId('dli'), target.deliveryId, fileId, up.original_name, max + 1);
+      } else if (target.purpose === 'selection_photo') {
+        addSelectionPhoto(db, p.id, target.setId, fileId);
       }
       if (target.purpose !== 'deliverable_version') {
         audit(db, {
@@ -457,6 +478,8 @@ export async function fileRoutes(app: FastifyInstance) {
     } else {
       assertClientCanReadFile(db, f);
     }
+    // 写真セレクトで「元ファイル名を表示しない」設定のときは、ヘッダにも元ファイル名を出さない（番号名にする）
+    const served = f.purpose === 'selection_photo' ? { ...f, original_name: selectionDisplayName(db, f) } : f;
     if (dl) {
       audit(db, {
         ownerId: p.owner_id,
@@ -471,7 +494,7 @@ export async function fileRoutes(app: FastifyInstance) {
         ...reqMeta(ctx, req),
       });
     }
-    return serveFile(ctx, req, reply, f, dl);
+    return serveFile(ctx, req, reply, served, dl);
   });
 
   // 取り下げ: 顧客は提出前（未提出/差戻し）の自分のファイルのみ、運営者は内部ファイル・未提出の添付
@@ -505,6 +528,7 @@ export async function fileRoutes(app: FastifyInstance) {
     const p = ownedProject(db, op.id, id);
     const f = projectFile(db, p.id, fid);
     if (f.purpose === 'deliverable_version') throw conflict('提出済みの版のファイルは取り下げできません（履歴保持のため）。新しい版を提出してください');
+    if (f.purpose === 'selection_photo') throw conflict('写真セレクトの写真は「写真セレクト」画面から削除してください');
     if (f.purpose === 'delivery_extra') {
       const pub = db.prepare(`SELECT 1 FROM delivery_items di JOIN deliveries d ON d.id = di.delivery_id WHERE di.file_id = ? AND d.status = 'published'`).get(f.id);
       if (pub) throw conflict('公開中の納品に含まれています');

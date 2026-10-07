@@ -188,3 +188,38 @@ table.tbl th, table.tbl td { text-align: left; padding: 8px 6px; border-bottom: 
 .tbl-wrap { overflow-x: auto; }
 .center-page { max-width: 440px; margin: 40px auto; padding: 0 16px; }
 .kbd { font-family: ui-monospace, Menlo, monospace; background: #eef1f4; padding: 2px 6px; border-radius: 6px; word-break: break-all; font-size: 0.85rem; }
+
+/* ---- Client Portal 修正指示（ピンの指示タイプ・修正指示書） ---- */
+.pin.keep { background: #1d6fd8; border-radius: 6px; transform: none; }
+.pin.keep > span { transform: none; }
+.pin.keep.resolved { background: #7b8794; }
+.pinnum.keep { background: #1d6fd8; border-radius: 5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 0.85rem; cursor: pointer; font-family: inherit; min-height: 32px; }
+.chip.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+.chip.keep.on { background: #1d6fd8; border-color: #1d6fd8; }
+.sheet-img { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.sheet-img img { max-width: 100%; max-height: 80vh; display: block; }
+.mk { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; background: #d93025; color: #fff; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 800; line-height: 1; }
+.mk.keep { background: #1d6fd8; border-radius: 7px; }
+.sheet-list { margin: 0; padding: 0; list-style: none; }
+.sheet-list li { padding: 8px 0; border-top: 1px solid var(--line); }
+
+/* ---- Client Portal 写真セレクト ---- */
+.photo-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 700px) { .photo-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.photo-card { border: 2px solid var(--line); border-radius: 10px; padding: 6px; background: #fff; display: flex; flex-direction: column; gap: 4px; }
+.photo-card.picked { border-color: var(--ok); box-shadow: 0 0 0 2px var(--ok); }
+.photo-card .ph { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #f3f5f7; border-radius: 6px; display: block; }
+.photo-card .num { font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.photo-card .fname { font-size: 0.78rem; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
+.photo-card button.toggle { width: 100%; }
+
+@media print {
+  .topbar, .bottomnav, .sidebar, .no-print, .offline { display: none !important; }
+  .main { padding: 0 !important; }
+  .card { box-shadow: none !important; break-inside: avoid; }
+  .sheet-img img { max-height: none; }
+  .sheet-list li { break-inside: avoid; }
+  .mk { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

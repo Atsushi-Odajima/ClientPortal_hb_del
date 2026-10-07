@@ -68,6 +68,15 @@ export function clientTodo(db: DB, projectId: string, clientId: string) {
       expired: !!d.expires_at && Date.parse(d.expires_at) < Date.now(),
       downloaded: !!d.downloaded,
     })),
+    // Client Portal 写真セレクト: 受付中で、この顧客がまだ送信していないセット
+    selections: (
+      db
+        .prepare(
+          `SELECT s.id, s.title, (SELECT submitted_at FROM selection_responses r WHERE r.set_id = s.id AND r.client_id = ?) submitted_at
+           FROM selection_sets s WHERE s.project_id = ? AND s.status = 'open' ORDER BY s.opened_at`,
+        )
+        .all(clientId, projectId) as { id: string; title: string; submitted_at: string | null }[]
+    ).map((s) => ({ id: s.id, title: s.title, submitted: !!s.submitted_at })),
   };
 }
 

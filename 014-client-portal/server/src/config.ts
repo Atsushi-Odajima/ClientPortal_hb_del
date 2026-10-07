@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 export const APP_VERSION = '1.0.0';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type StorageDriverName = 'local' | 's3';
 export type MailDriverName = 'none' | 'dev-file' | 'smtp';

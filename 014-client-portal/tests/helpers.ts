@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../server/src/app.js';
 import type { AppConfig } from '../server/src/config.js';
@@ -157,4 +158,28 @@ export async function submitVersion(op: Agent, projectId: string, deliverableId:
 
 export function idem(): string {
   return `k${Math.random().toString(36).slice(2)}${Date.now().toString(36)}xxxxxxxx`.slice(0, 32);
+}
+
+/** テスト用の小さな PNG を生成（seed ごとに内容＝ハッシュが異なる） */
+export function makePng(seed: number, width = 4, height = 3): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(td) >>> 0);
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // RGB
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (width * 3 + 1)] = 0;
+    for (let x = 0; x < width * 3; x++) raw[y * (width * 3 + 1) + 1 + x] = (seed * 37 + x * 11 + y * 7) & 0xff;
+  }
+  raw.writeUInt32BE(seed >>> 0, 1); // 先頭画素に seed を埋め込み、内容を一意にする
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }

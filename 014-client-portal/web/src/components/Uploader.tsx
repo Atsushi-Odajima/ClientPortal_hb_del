@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ApiError, uploadFile, type UploadProgress } from '../api';
 import { fmtSize, useOnline } from './ui';
+import { naturalCompare } from '../../../shared/photoSelect';
 
 interface Job {
   key: string;
@@ -24,6 +25,10 @@ export function Uploader({
   label = 'ファイルを追加',
   mediaButton = true,
   disabled,
+  maxFiles = 20,
+  sortByName = false,
+  accept,
+  onBatchDone,
 }: {
   initUrl: string;
   extra: Record<string, unknown>;
@@ -32,6 +37,14 @@ export function Uploader({
   label?: string;
   mediaButton?: boolean;
   disabled?: boolean;
+  /** 1回に選べる最大件数（既定20） */
+  maxFiles?: number;
+  /** 送信前にファイル名の自然順（IMG_2 → IMG_10）に並べる（写真セレクト用） */
+  sortByName?: boolean;
+  /** ファイル選択の accept（既定なし） */
+  accept?: string;
+  /** 選んだファイルをすべて処理し終えたとき */
+  onBatchDone?: () => void;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [over, setOver] = useState(false);
@@ -57,12 +70,15 @@ export function Uploader({
 
   function add(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const list = Array.from(files).slice(0, multiple ? 20 : 1);
+    let list = Array.from(files);
+    if (sortByName) list.sort((a, b) => naturalCompare(a.name, b.name));
+    list = list.slice(0, multiple ? maxFiles : 1);
     const newJobs = list.map((file) => ({ key: `${file.name}-${file.size}-${Math.random()}`, file, progress: { loaded: 0, total: file.size, phase: 'uploading' as const } }));
     setJobs((js) => [...js, ...newJobs]);
     // 順番に送る（モバイル回線での同時送信を避ける）
     void (async () => {
       for (const j of newJobs) await run(j);
+      onBatchDone?.();
     })();
   }
 
@@ -94,7 +110,7 @@ export function Uploader({
         <div className="muted small" style={{ marginTop: 8 }}>
           {online ? 'パソコンではここにドラッグ&ドロップもできます' : 'オフラインのためアップロードできません'}
         </div>
-        <input ref={fileRef} type="file" className="hidden" multiple={multiple} onChange={(e) => (add(e.target.files), (e.target.value = ''))} data-testid="file-input" />
+        <input ref={fileRef} type="file" className="hidden" multiple={multiple} accept={accept} onChange={(e) => (add(e.target.files), (e.target.value = ''))} data-testid="file-input" />
         <input ref={mediaRef} type="file" className="hidden" accept="image/*,video/*" multiple={multiple} onChange={(e) => (add(e.target.files), (e.target.value = ''))} />
       </div>
       {jobs.map((j) => {

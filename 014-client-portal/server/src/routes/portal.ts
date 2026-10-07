@@ -10,7 +10,7 @@ import { deliverableDto, deliveryDto, projectDto, requestDto } from '../services
 import { clientTodo } from '../services/summary.js';
 import { approveVersion, createComment, deleteComment, editComment, listComments, requestChanges, resolveComment, revokeApproval } from '../services/review.js';
 import { notify } from '../notify.js';
-import { commentBody } from './app-deliverables.js';
+import { commentBody, commentEditBody } from './app-deliverables.js';
 import { assertZipSize, buildZipEntries, streamZip } from '../services/zip.js';
 import { safeFileName } from '../util.js';
 
@@ -36,7 +36,7 @@ export async function portalRoutes(app: FastifyInstance) {
         const todo = clientTodo(db, p.id, c.id);
         return {
           ...projectDto(p, 'client'),
-          todoCount: todo.requests.toSubmit.length + todo.reviews.length + todo.deliveries.filter((d) => !d.downloaded && !d.expired).length,
+          todoCount: todo.requests.toSubmit.length + todo.reviews.length + todo.deliveries.filter((d) => !d.downloaded && !d.expired).length + todo.selections.filter((x) => !x.submitted).length,
         };
       }),
     };
@@ -187,8 +187,8 @@ export async function portalRoutes(app: FastifyInstance) {
   app.patch('/api/portal/projects/:id/comments/:cid', async (req) => {
     const { p, actor, meta } = load(req);
     const { cid } = req.params as { cid: string };
-    const b = z.object({ body: z.string().max(4000) }).parse(req.body);
-    editComment(ctx, p, cid, actor, b.body, meta);
+    const b = commentEditBody.parse(req.body);
+    editComment(ctx, p, cid, actor, b.body, meta, b.pinType);
     return { ok: true };
   });
 

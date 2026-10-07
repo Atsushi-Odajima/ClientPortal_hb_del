@@ -73,6 +73,7 @@ export function projectFile(db: DB, projectId: string, fileId: string): FileRow 
  * - request_attachment: 取り下げ済みは不可
  * - deliverable_version: 提出済み version に紐づくもののみ
  * - delivery_extra: 公開中かつ期限内の納品セットに含まれるもののみ
+ * - selection_photo: 公開済み（open/closed）の写真セレクトに含まれるもののみ
  */
 export function assertClientCanReadFile(db: DB, file: FileRow): void {
   if (file.status !== 'active') throw notFound('ファイル');
@@ -97,6 +98,17 @@ export function assertClientCanReadFile(db: DB, file: FileRow): void {
       if (!ok.some((r) => !r.expires_at || Date.parse(r.expires_at) > Date.now())) {
         throw new HttpError(410, 'expired', 'ダウンロード期限が過ぎています。担当者にご連絡ください');
       }
+      return;
+    }
+    case 'selection_photo': {
+      // Client Portal 写真セレクト: 顧客に公開済み（open / closed）のセットの写真のみ。準備中（draft）は不可
+      const ok = db
+        .prepare(
+          `SELECT 1 FROM selection_photos sp JOIN selection_sets s ON s.id = sp.set_id
+           WHERE sp.file_id = ? AND s.project_id = ? AND s.status IN ('open','closed')`,
+        )
+        .get(file.id, file.project_id);
+      if (!ok) throw notFound('ファイル');
       return;
     }
     default:

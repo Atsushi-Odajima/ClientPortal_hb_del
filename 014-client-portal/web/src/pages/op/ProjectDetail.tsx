@@ -4,6 +4,7 @@ import { ApiError, del, get, patch, post } from '../../api';
 import { AsyncButton, Empty, Modal, Page, StatusBadge, fmtDate, fmtSize, useApi, useTitle, useToast } from '../../components/ui';
 import { Uploader } from '../../components/Uploader';
 import { useMe } from './OperatorApp';
+import { SelectionsTab } from './SelectionOp';
 import { PROJECT_STATUSES, PROJECT_STATUS_CLIENT_LABEL, PROJECT_STATUS_LABEL, REQUEST_KIND_LABEL, type ProjectStatus } from '../../../../shared/labels';
 
 interface FileDto {
@@ -76,6 +77,7 @@ const TABS = [
   ['overview', '概要'],
   ['requests', '資料'],
   ['deliverables', '制作物'],
+  ['selections', '写真セレクト'],
   ['deliveries', '納品'],
   ['share', '共有・招待'],
   ['files', '作業ファイル'],
@@ -115,6 +117,7 @@ export function ProjectDetail() {
           {tab === 'overview' && <Overview d={d} reload={st.reload} />}
           {tab === 'requests' && <RequestsTab d={d} reload={st.reload} />}
           {tab === 'deliverables' && <DeliverablesTab d={d} reload={st.reload} />}
+          {tab === 'selections' && <SelectionsTab projectId={d.project.id} />}
           {tab === 'deliveries' && <DeliveriesTab d={d} reload={st.reload} />}
           {tab === 'share' && <ShareTab d={d} reload={st.reload} />}
           {tab === 'files' && <FilesTab d={d} reload={st.reload} />}

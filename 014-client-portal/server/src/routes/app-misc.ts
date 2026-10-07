@@ -314,6 +314,10 @@ export async function miscRoutes(app: FastifyInstance) {
       changeRequests: own('SELECT c.* FROM change_requests c JOIN projects p ON p.id = c.project_id WHERE p.owner_id = ?'),
       approvals: own('SELECT a.* FROM approvals a JOIN projects p ON p.id = a.project_id WHERE p.owner_id = ?'),
       deliveries: own('SELECT d.* FROM deliveries d JOIN projects p ON p.id = d.project_id WHERE p.owner_id = ?'),
+      selectionSets: own('SELECT s.* FROM selection_sets s JOIN projects p ON p.id = s.project_id WHERE p.owner_id = ?'),
+      selectionPhotos: own('SELECT sp.* FROM selection_photos sp JOIN projects p ON p.id = sp.project_id WHERE p.owner_id = ?'),
+      selectionPicks: own('SELECT k.* FROM selection_picks k JOIN selection_sets s ON s.id = k.set_id JOIN projects p ON p.id = s.project_id WHERE p.owner_id = ?'),
+      selectionResponses: own('SELECT r.* FROM selection_responses r JOIN selection_sets s ON s.id = r.set_id JOIN projects p ON p.id = s.project_id WHERE p.owner_id = ?'),
       deliveryItems: own('SELECT i.* FROM delivery_items i JOIN deliveries d ON d.id = i.delivery_id JOIN projects p ON p.id = d.project_id WHERE p.owner_id = ?'),
       auditLog: own('SELECT seq, id, project_id, actor_type, actor_id, actor_name, action, target_type, target_id, summary, detail_json, created_at, hash FROM audit_log WHERE owner_id = ? ORDER BY seq'),
     };
@@ -327,7 +331,7 @@ export async function miscRoutes(app: FastifyInstance) {
       try {
         archive.append(JSON.stringify(data, null, 2), { name: 'data.json' });
         archive.append(
-          'このZIPには Client Portal に保存されたあなたのデータ（顧客・案件・資料・制作物・コメント・承認・納品・監査ログ）とファイル実体が含まれます。\nfiles/<案件ID>/<ファイルID>_<元ファイル名> がファイル実体、data.json の files が対応表です。\n',
+          'このZIPには Client Portal に保存されたあなたのデータ（顧客・案件・資料・制作物・コメント・承認・納品・写真セレクト・監査ログ）とファイル実体が含まれます。\nfiles/<案件ID>/<ファイルID>_<元ファイル名> がファイル実体、data.json の files が対応表です。\n',
           { name: 'README.txt' },
         );
         for (const f of files) {

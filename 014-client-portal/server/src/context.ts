@@ -75,7 +75,7 @@ export interface FileRow {
   mime: string;
   size: number;
   sha256: string;
-  purpose: 'request_attachment' | 'deliverable_version' | 'delivery_extra' | 'internal';
+  purpose: 'request_attachment' | 'deliverable_version' | 'delivery_extra' | 'internal' | 'selection_photo';
   request_id: string | null;
   version_group_id: string | null;
   version_number: number | null;

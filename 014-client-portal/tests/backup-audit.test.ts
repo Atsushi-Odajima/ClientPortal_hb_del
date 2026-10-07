@@ -51,7 +51,7 @@ describe('バックアップ・復元', () => {
   it('バックアップ → 空環境へ復元 → 案件/version/ファイル/コメント/承認ハッシュ/納品が一致', async () => {
     const out = tmpDir('cp-bk-');
     const { dir, manifest } = await createBackup(loadConfig({ dataDir }), out);
-    expect(manifest).toMatchObject({ format: 'client-portal-backup', schemaVersion: 1, appVersion: '1.0.0' });
+    expect(manifest).toMatchObject({ format: 'client-portal-backup', schemaVersion: 2, appVersion: '1.0.0' });
     expect(manifest.fileCount).toBeGreaterThan(5);
     expect(manifest.counts.approvals).toBeGreaterThan(0);
     expect(manifest.auditChain.ok).toBe(true);

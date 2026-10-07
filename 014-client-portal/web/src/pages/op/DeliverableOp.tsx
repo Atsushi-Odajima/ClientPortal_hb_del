@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, post } from '../../api';
 import { AsyncButton, Modal, Page, useApi, useTitle, useToast } from '../../components/ui';
 import { Uploader } from '../../components/Uploader';
 import { ReviewPanel, type CommentDto, type DeliverableDto } from '../../components/Review';
+import { CorrectionSheetPage } from '../../components/CorrectionSheet';
+
+/** Client Portal 修正指示: 修正指示書（運営者） */
+export function OperatorSheet() {
+  const { pid, did, vid } = useParams();
+  const [sp] = useSearchParams();
+  return <CorrectionSheetPage base={`/api/app/projects/${pid}`} versionId={vid!} changeRequestId={sp.get('cr')} backTo={`/app/projects/${pid}/deliverables/${did}`} />;
+}
 
 export function DeliverableOp() {
   const { pid, did } = useParams();
@@ -33,6 +41,7 @@ export function DeliverableOp() {
                 selectedId={selected!}
                 onSelect={setSel}
                 onChanged={st.reload}
+                sheetPath={(vid, cr) => `/app/projects/${pid}/deliverables/${did}/sheet/${vid}${cr ? `?cr=${encodeURIComponent(cr)}` : ''}`}
                 actions={(v) =>
                   v.approval ? (
                     <div className="card">

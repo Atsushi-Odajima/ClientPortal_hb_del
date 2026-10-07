@@ -76,3 +76,34 @@
 - 追記専用テーブル + UPDATE/DELETE 禁止トリガー + SHA-256 ハッシュチェーン（改ざん検出）。
 - 秘密情報キー（token/password/secret/cookie）は detail から除外。ファイル本文・コメント本文は保存しない（要約のみ）。
 - 案件削除時も監査ログは残す（IDとイベント種別のみ）。完全消去が必要な場合の保守手順は OPERATIONS.md。
+
+## D12. 単体ツール2本の統合（2026-10-07）: Client Portal 修正指示 / Client Portal 写真セレクト
+統合元（読み取り専用・変更していない）: hanbai4 `image-correction-maker`（画像 修正指示メーカー）、hanbai9 `009-photo-select-list-maker`（写真セレクト一覧メーカー）。
+命名規則: 製品名のない統合機能は本アプリ名を冠する（画面・資料で「Client Portal 修正指示」「Client Portal 写真セレクト」）。
+
+### D12-1. Client Portal 修正指示 = 既存の画像ピンコメントを拡張（新しい注釈テーブルは作らない）
+- 採用: 既存の制作物版のピンコメント（comments.pin_*）に `pin_type`（change/delete/add/move/keep/other、元ツールの6種）を追加。修正指示書（番号入り画像＋【修正指示】【変更しない箇所】の一覧）を運営者・顧客の両方で表示・印刷・テキスト保存（BOM+CRLF）・番号入り画像保存（ブラウザのCanvasで元画像実寸に描画、JPEGはJPEG/他はPNG）。
+- 理由: 本アプリには既に「画像に相対座標でピン → コメント → 修正依頼に固定記録（pin_comment_ids_json）」の流れがあり、別系統の注釈を作ると二重管理になる。修正依頼（change_requests）が依頼時点の未解決ピンIDを保持しているため、「この修正依頼の修正指示書」をそのまま再現できる（承認・修正依頼フローとの自然な連携）。
+- 番号: 元ツールは削除時に振り直すが、本アプリはピン作成時に確定した pin_number を使い**振り直さない**（顧客と運営者がチャット等で番号を共有した後にずれないため。修正依頼の固定記録とも一致）。丸数字 ①〜⑳・21以降 (21)・テキスト構成・定型文の連結規則・マーカー描画（赤丸/青角丸、白縁+暗い外縁+影、短辺×5%）は元ツールから移植（shared/correctionSheet.ts, web/src/components/CorrectionSheet.tsx）。
+- 対象: 制作物の版（画像: JPEG/PNG/GIF/WebP）のみ。資料添付の画像への注釈は対象外（修正の対象は制作物であり、承認フローと結び付かないため）。
+- 統合しなかったもの: ZIP一括保存（印刷/PDF・画像・テキストを個別に保存できるため不要。自作ZIPは移植しない）、マーカーのドラッグ移動・矢印キー移動・Undo・マーカーサイズ切替（ピンは送信済みコメントであり、位置変更は「削除して置き直す」運用）、クリップボードからの画像貼り付け（画像は版として提出する流れ）、案件名等の入力欄（案件・制作物から自動）。
+
+### D12-2. Client Portal 写真セレクト = 新テーブル4つ + files.purpose 'selection_photo'
+- 採用: 運営者が写真をまとめてアップロード（既存の分割アップロード、target.purpose='selection_photo'）→ 001〜の番号付き「セレクト」→ 顧客がポータルでタップまたは番号入力で選択（その都度サーバー保存）→ 送信で運営者に通知 → 運営者は番号→元ファイル名で確認・CSV/テキスト書き出し。
+- 番号: `selection_photos.position`（1始まり）。準備中（draft）のみ並べ替え・削除可（削除・並べ替え後は欠番なく詰め直す）。公開（open）後は番号を固定し、追加は末尾。元ツールの「渡した後に並べ替えると番号が変わる」問題をサーバー側で防ぐ。
+- 移植した規則（shared/photoSelect.ts、元テストも移植）: 3桁ゼロ埋め（999超は桁を伸ばす）、自然順（localeCompare ja numeric）、区切り（, ， 、 ､ 空白 全角空白 タブ 改行）、全角数字、0省略（7→007、入力表記を表示）、該当なしは補正しない、数字以外は「読み取れなかった文字」、重複通知、CSV（BOM・CRLF・引用・数式インジェクション対策）、上限300枚/警告150枚。
+- files の CHECK 制約変更のため migration 002 で files を作り直す（SQLite 推奨手順。`-- migrate:foreign-keys-off` 指定のマイグレーションは外部キーを一時無効化し、コミット前に foreign_key_check。server/src/db.ts）。
+- 画像のみ受付（file-type 判定で preview_kind='image'）。同一セットに同じ内容（SHA-256一致）は二重登録不可（元ツールの「同じファイルは追加しない」）。同名の別写真は登録し「同名あり」表示。
+- 「元ファイル名を表示」設定（show_names）: OFF なら顧客APIは名前を返さず、ファイル配信の Content-Disposition も「007.jpg」にする。
+- 統合しなかったもの: 共有用HTML一覧ZIP・A4印刷レイアウト（ポータル自体が共有ページのため）、サムネイル生成（サーバーに画像処理ライブラリを追加しない方針。`loading="lazy"` で元画像を表示。大量・大容量写真では重くなる → NEXT_STEPS）、3列/4列切替（画面幅で自動）。
+
+### D12-3. FreelanceDesk への統合（candidate 7）向け引き継ぎ
+- 新テーブル: `selection_sets`, `selection_photos`, `selection_picks`, `selection_responses`。既存変更: `comments.pin_type` 追加、`files.purpose` に `selection_photo` 追加（files 作り直し）。SCHEMA_VERSION=2。詳細は DATA_MODEL.md。
+- 新API（運営者 `/api/app/projects/:id/…`、顧客 `/api/portal/projects/:id/…`）:
+  - 修正指示: `GET …/versions/:vid/instructions?format=json|txt&changeRequestId=&includeResolved=1`（両側）。コメント作成/編集に `pinType`（任意）。versionDto.changeRequests に `pinCount`。
+  - 写真セレクト（運営者）: `GET/POST …/selections`, `GET/PATCH/DELETE …/selections/:sid`, `POST …/:sid/status {status:open|closed}`, `POST …/:sid/photos/:phid/move {toNumber}`, `POST …/:sid/sort-by-name`, `POST …/:sid/photos/delete {photoIds}`, `GET …/:sid/export?kind=map|picks&format=csv|txt&clientId=`。写真追加は `POST /api/app/projects/:id/uploads` に `target:{purpose:'selection_photo', setId}`。
+  - 写真セレクト（顧客）: `GET …/selections`, `GET …/selections/:sid`, `POST …/:sid/picks {photoIds}|{numbersText, mode:add|replace}`, `POST …/:sid/submit {note}`。
+- 新画面: 運営者 `/app/projects/:pid?tab=selections`（一覧・作成）、`/app/projects/:pid/selections/:sid`（SelectionOp）、`/app/projects/:pid/deliverables/:did/sheet/:vid[?cr=]`（修正指示書）。顧客 `/portal/p/:pid/select`, `/portal/p/:pid/select/:sid`, `/portal/p/:pid/review/:did/sheet/:vid[?cr=]`。ホーム「やること」に未送信セレクト（clientTodo.selections）。
+- 通知種別: `selection_opened`（顧客へ）、`selection_submitted`（運営者へ）。監査: `selection.created/opened/reopened/closed/photos_deleted/deleted/submitted`。
+- 認可は既存の access.ts（ownedProject / clientProject）を必ず通し、セットは project_id で照合（他者は404）。顧客は draft を参照不可、写真ファイルは assertClientCanReadFile の `selection_photo` 分岐（公開済みセットのみ）。
+- 共有ロジックは DOM 非依存の `shared/photoSelect.ts`, `shared/correctionSheet.ts`（そのまま移植可能）。

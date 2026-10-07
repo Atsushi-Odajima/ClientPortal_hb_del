@@ -1,6 +1,6 @@
 # DATA_MODEL — データモデル
 
-正本: `server/migrations/001_init.sql`（schemaVersion 1）。IDは `prefix_` + base62 22文字（約131bit, 推測困難）。日時は ISO8601 UTC、日付は `YYYY-MM-DD`。
+正本: `server/migrations/001_init.sql` + `002_correction_selection.sql`（schemaVersion 2）。IDは `prefix_` + base62 22文字（約131bit, 推測困難）。日時は ISO8601 UTC、日付は `YYYY-MM-DD`。
 
 ## ER 概要
 
@@ -14,6 +14,9 @@ operators 1─* clients 1─* projects 1─* document_requests 1─* files(reque
     │                         │                                        ├─* change_requests（不変）
     │                         │                                        └─* approvals（不変・取消は追記）
     │                         ├─* deliveries 1─* delivery_items ─ version / approval / file
+    │                         ├─* selection_sets 1─* selection_photos 1─1 files(selection_photo)
+    │                         │        ├─* selection_picks（顧客×写真）
+    │                         │        └─* selection_responses（顧客ごとの送信）
     │                         └─* project_status_history
     ├─* templates
     └─ audit_log（追記専用・ハッシュチェーン）/ notifications / mail_outbox
@@ -31,14 +34,18 @@ operators 1─* clients 1─* projects 1─* document_requests 1─* files(reque
 | portal_access | project_id, client_id, status(active/revoked) | 顧客×案件のアクセス権 |
 | invites | access_id, kind(invite/magic), token_hash, expires_at, revoked_at, max_uses, use_count, failed_attempts | |
 | document_requests | kind(file/text/url/choice/check), required, due_date, choices_json, status(pending/submitted/returned/accepted), answer_*, return_reason, internal_memo | 提出(submitted)と確認(accepted)を分離 |
-| files | project_id, uploader_type/id, original_name, storage_key, mime, size, sha256, purpose(request_attachment/deliverable_version/delivery_extra/internal), request_id, version_group_id, version_number, preview_kind, width, height, status(active/withdrawn) | storage_key/sha256/size は不変（トリガー） |
+| files | project_id, uploader_type/id, original_name, storage_key, mime, size, sha256, purpose(request_attachment/deliverable_version/delivery_extra/internal/selection_photo), request_id, version_group_id, version_number, preview_kind, width, height, status(active/withdrawn) | storage_key/sha256/size は不変（トリガー） |
 | deliverables | title, category, description | versionGroup |
 | deliverable_versions | deliverable_id, version_number(UNIQUE per deliverable), file_id, note, checklist_json, review_due_date, status(in_review/changes_requested/approved/superseded), submitted_by/at | file_id 等は不変（トリガー） |
-| comments | version_id, parent_id(返信), author_type/id/name, body, pin_x/pin_y(0..1 元画像比), pin_number, resolved_at, edited_at, deleted_at | 削除は論理削除 |
+| comments | version_id, parent_id(返信), author_type/id/name, body, pin_x/pin_y(0..1 元画像比), pin_number, pin_type, resolved_at, edited_at, deleted_at | 削除は論理削除。pin_type（v2, Client Portal 修正指示）: change/delete/add/move/keep/other、ピンなしは NULL |
 | change_requests | version_id, client_id, client_name, body, pin_comment_ids_json | 不変（UPDATE禁止トリガー） |
 | approvals | version_id, version_number, client_id, file_id, file_sha256, comment, idempotency_key(UNIQUE), approved_at, revoked_at/by/reason | 有効承認は1版1件（部分UNIQUE）、本体列は不変 |
 | deliveries | title, description, notice, expires_at, status(draft/published/withdrawn), published_at | |
 | delivery_items | delivery_id, version_id, approval_id, file_id, label | 追加納品ファイルは version_id NULL |
+| selection_sets | project_id, title, message, show_names, status(draft/open/closed), opened_at, closed_at | Client Portal 写真セレクト（v2）。draft は顧客に非表示 |
+| selection_photos | set_id, project_id, file_id(UNIQUE), position(UNIQUE per set) | 番号 = position。公開後は並べ替え・削除不可 |
+| selection_picks | PK(set_id, client_id, photo_id) | 顧客の現在の選択（クリック・番号入力の都度保存） |
+| selection_responses | PK(set_id, client_id), client_name, note, picks_updated_at, submitted_at, submitted_count | 送信記録。picks_updated_at > submitted_at なら「送信後に変更あり」 |
 | notifications | recipient_type/id, kind, title, body, link, dedupe_key(UNIQUE), read_at | アプリ内通知 |
 | mail_outbox | to, subject, body_text, status, attempts, dedupe_key | 送信後本文消去 |
 | uploads | 分割アップロードの一時管理（chunk_size, received_json, target_json, status） | 完了後7日/期限切れで掃除 |
@@ -52,6 +59,7 @@ operators 1─* clients 1─* projects 1─* document_requests 1─* files(reque
 - 資料: pending →(顧客提出) submitted →(運営者) accepted / returned →(再提出) submitted
 - 版: in_review →(修正依頼) changes_requested / (承認) approved；新版提出で直前版は superseded；承認取消で最新版は in_review に戻る
 - 納品: draft →(公開・承認再検証) published →(取り下げ) withdrawn
+- 写真セレクト: draft（並べ替え・削除可）→(公開・顧客へ通知) open（顧客が選択・送信）⇄ closed（受付終了・閲覧のみ）
 
 ## 削除・アーカイブの仕様
 | 対象 | アーカイブ | 削除 |

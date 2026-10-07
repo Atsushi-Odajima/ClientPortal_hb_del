@@ -12,7 +12,9 @@ export type NotificationKind =
   | 'approval_revoked'
   | 'delivery_published'
   | 'overdue'
-  | 'invite';
+  | 'invite'
+  | 'selection_opened'
+  | 'selection_submitted';
 
 export interface NotifyInput {
   ownerId: string;

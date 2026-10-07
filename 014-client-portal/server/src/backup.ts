@@ -34,6 +34,10 @@ const COUNT_TABLES = [
   'deliveries',
   'delivery_items',
   'templates',
+  'selection_sets',
+  'selection_photos',
+  'selection_picks',
+  'selection_responses',
   'audit_log',
 ] as const;
 
@@ -60,7 +64,9 @@ async function sha256OfFile(p: string): Promise<string> {
 
 function tableCounts(db: Database.Database): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const t of COUNT_TABLES) out[t] = (db.prepare(`SELECT COUNT(*) n FROM ${t}`).get() as { n: number }).n;
+  // 古いスキーマのバックアップには後から追加したテーブルがないため、存在するテーブルだけ数える
+  const exists = new Set((db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]).map((r) => r.name));
+  for (const t of COUNT_TABLES) if (exists.has(t)) out[t] = (db.prepare(`SELECT COUNT(*) n FROM ${t}`).get() as { n: number }).n;
   return out;
 }
 

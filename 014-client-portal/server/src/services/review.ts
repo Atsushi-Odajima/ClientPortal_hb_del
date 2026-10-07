@@ -5,6 +5,7 @@ import { notify, notifyProjectClients } from '../notify.js';
 import { HttpError, badRequest, conflict, newId, notFound, nowIso } from '../util.js';
 import { autoTransition, setProjectStatus } from './projectState.js';
 import { approvalDto } from './dto.js';
+import { PIN_TYPE_LABEL, normalizePinType, type PinType } from '../../../shared/correctionSheet.js';
 
 interface Meta {
   ipHash: string;
@@ -24,6 +25,8 @@ export interface CommentRow {
   pin_x: number | null;
   pin_y: number | null;
   pin_number: number | null;
+  /** Client Portal 修正指示: ピンの指示タイプ（ピンなしは NULL） */
+  pin_type: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
   edited_at: string | null;
@@ -42,7 +45,10 @@ export function commentDto(c: CommentRow, viewer: { type: string; id: string }) 
     mine: c.author_type === viewer.type && c.author_id === viewer.id,
     body: deleted ? '' : c.body,
     deleted,
-    pin: c.pin_x !== null && c.pin_y !== null ? { x: c.pin_x, y: c.pin_y, number: c.pin_number } : null,
+    pin:
+      c.pin_x !== null && c.pin_y !== null
+        ? { x: c.pin_x, y: c.pin_y, number: c.pin_number, type: normalizePinType(c.pin_type), typeLabel: PIN_TYPE_LABEL[normalizePinType(c.pin_type)] }
+        : null,
     resolved: !!c.resolved_at,
     resolvedAt: c.resolved_at,
     edited: !!c.edited_at,
@@ -65,7 +71,7 @@ export function createComment(
   p: ProjectRow,
   actor: Actor & { type: 'operator' | 'client' },
   versionId: string,
-  input: { body: string; pin?: { x: number; y: number } | null; parentId?: string | null },
+  input: { body: string; pin?: { x: number; y: number } | null; pinType?: PinType | null; parentId?: string | null },
   meta: Meta,
 ) {
   const { db } = ctx;
@@ -89,9 +95,24 @@ export function createComment(
       pinNumber = ((db.prepare('SELECT COALESCE(MAX(pin_number), 0) m FROM comments WHERE version_id = ?').get(v.id) as { m: number }).m ?? 0) + 1;
     }
     db.prepare(
-      `INSERT INTO comments (id, project_id, deliverable_id, version_id, parent_id, author_type, author_id, author_name, body, pin_x, pin_y, pin_number, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, p.id, d.id, v.id, input.parentId ?? null, actor.type, actor.id, actor.name, body, input.pin?.x ?? null, input.pin?.y ?? null, pinNumber, nowIso());
+      `INSERT INTO comments (id, project_id, deliverable_id, version_id, parent_id, author_type, author_id, author_name, body, pin_x, pin_y, pin_number, pin_type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      p.id,
+      d.id,
+      v.id,
+      input.parentId ?? null,
+      actor.type,
+      actor.id,
+      actor.name,
+      body,
+      input.pin?.x ?? null,
+      input.pin?.y ?? null,
+      pinNumber,
+      input.pin ? normalizePinType(input.pinType) : null,
+      nowIso(),
+    );
     db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(nowIso(), p.id);
     audit(db, {
       ownerId: p.owner_id,
@@ -140,11 +161,12 @@ export function getOwnComment(ctx: Ctx, p: ProjectRow, commentId: string, actor:
   return c;
 }
 
-export function editComment(ctx: Ctx, p: ProjectRow, commentId: string, actor: Actor, body: string, meta: Meta) {
+export function editComment(ctx: Ctx, p: ProjectRow, commentId: string, actor: Actor, body: string, meta: Meta, pinType?: PinType) {
   const c = getOwnComment(ctx, p, commentId, actor);
   if (!body.trim()) throw badRequest('コメントを入力してください');
+  if (pinType && c.pin_number === null) throw badRequest('指示タイプはピンコメントにのみ設定できます');
   ctx.db.transaction(() => {
-    ctx.db.prepare('UPDATE comments SET body = ?, edited_at = ? WHERE id = ?').run(body.trim(), nowIso(), c.id);
+    ctx.db.prepare('UPDATE comments SET body = ?, pin_type = COALESCE(?, pin_type), edited_at = ? WHERE id = ?').run(body.trim(), pinType ?? null, nowIso(), c.id);
     audit(ctx.db, { ownerId: p.owner_id, projectId: p.id, actor, action: 'comment.edited', targetType: 'comment', targetId: c.id, ...meta });
   })();
 }

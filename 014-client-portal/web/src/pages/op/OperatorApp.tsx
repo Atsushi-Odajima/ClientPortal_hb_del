@@ -5,7 +5,8 @@ import { ErrorBox, Loading } from '../../components/ui';
 import { Dashboard } from './Dashboard';
 import { ProjectList } from './Projects';
 import { ProjectDetail } from './ProjectDetail';
-import { DeliverableOp } from './DeliverableOp';
+import { DeliverableOp, OperatorSheet } from './DeliverableOp';
+import { SelectionOp } from './SelectionOp';
 import { ClientDetail, ClientList } from './Clients';
 import { AuditPage, NotificationsPage, SearchPage, SettingsPage, TemplatesPage } from './Misc';
 
@@ -107,6 +108,8 @@ export default function OperatorApp() {
               <Route path="projects" element={<ProjectList />} />
               <Route path="projects/:pid" element={<ProjectDetail />} />
               <Route path="projects/:pid/deliverables/:did" element={<DeliverableOp />} />
+              <Route path="projects/:pid/deliverables/:did/sheet/:vid" element={<OperatorSheet />} />
+              <Route path="projects/:pid/selections/:sid" element={<SelectionOp />} />
               <Route path="clients" element={<ClientList />} />
               <Route path="clients/:cid" element={<ClientDetail />} />
               <Route path="templates" element={<TemplatesPage />} />

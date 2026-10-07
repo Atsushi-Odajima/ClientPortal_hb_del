@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, del, patch, post } from '../api';
 import { AsyncButton, StatusBadge, fmtDate, fmtSize, useOnline, useToast } from './ui';
+import { Link } from 'react-router-dom';
+import { PIN_PRESETS, PIN_TYPES, applyPreset, type PinType } from '../../../shared/correctionSheet';
 
 export interface FileDto {
   id: string;
@@ -43,7 +45,7 @@ export interface VersionDto {
   openCommentCount: number;
   approval: Approval | null;
   approvalHistory: Approval[];
-  changeRequests: { id: string; clientName: string; body: string; createdAt: string }[];
+  changeRequests: { id: string; clientName: string; body: string; pinCount: number; createdAt: string }[];
 }
 
 export interface DeliverableDto {
@@ -66,7 +68,7 @@ export interface CommentDto {
   mine: boolean;
   body: string;
   deleted: boolean;
-  pin: { x: number; y: number; number: number } | null;
+  pin: { x: number; y: number; number: number; type: PinType; typeLabel: string } | null;
   resolved: boolean;
   edited: boolean;
   createdAt: string;
@@ -85,7 +87,7 @@ export function PinImage({
 }: {
   src: string;
   alt: string;
-  pins: { id: string; x: number; y: number; number: number; resolved: boolean }[];
+  pins: { id: string; x: number; y: number; number: number; resolved: boolean; keep?: boolean }[];
   adding: boolean;
   draft: { x: number; y: number } | null;
   focusId: string | null;
@@ -107,13 +109,13 @@ export function PinImage({
         <button
           key={p.id}
           type="button"
-          className={`pin ${p.resolved ? 'resolved' : ''} ${focusId === p.id ? 'focus' : ''}`}
+          className={`pin ${p.resolved ? 'resolved' : ''} ${p.keep ? 'keep' : ''} ${focusId === p.id ? 'focus' : ''}`}
           style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
           onClick={(e) => {
             e.stopPropagation();
             onPinClick(p.id);
           }}
-          aria-label={`ピン${p.number}`}
+          aria-label={`ピン${p.number}${p.keep ? '（変更しない箇所）' : ''}`}
           data-testid={`pin-${p.number}`}
         >
           <span>{p.number}</span>
@@ -179,6 +181,7 @@ export function ReviewPanel({
   onSelect,
   onChanged,
   actions,
+  sheetPath,
 }: {
   base: string;
   deliverable: DeliverableDto;
@@ -187,15 +190,18 @@ export function ReviewPanel({
   onSelect: (id: string) => void;
   onChanged: () => void;
   actions?: (v: VersionDto) => ReactNode;
+  /** Client Portal 修正指示: 修正指示書ページへのパス */
+  sheetPath?: (versionId: string, changeRequestId?: string) => string;
 }) {
   const v = deliverable.versions.find((x) => x.id === selectedId) ?? deliverable.versions[0];
   const list = comments[v.id] ?? [];
   const [adding, setAdding] = useState(false);
   const [draftPin, setDraftPin] = useState<{ x: number; y: number } | null>(null);
+  const [pinType, setPinType] = useState<PinType>('change');
   const [text, setText] = useState('');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<CommentDto | null>(null);
-  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; body: string; pinType?: PinType } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const online = useOnline();
   const toast = useToast();
@@ -223,7 +229,7 @@ export function ReviewPanel({
   }, [text, v.id]);
 
   const pins = useMemo(
-    () => list.filter((c) => c.pin && !c.deleted).map((c) => ({ id: c.id, x: c.pin!.x, y: c.pin!.y, number: c.pin!.number, resolved: c.resolved })),
+    () => list.filter((c) => c.pin && !c.deleted).map((c) => ({ id: c.id, x: c.pin!.x, y: c.pin!.y, number: c.pin!.number, resolved: c.resolved, keep: c.pin!.type === 'keep' })),
     [list],
   );
   const roots = list.filter((c) => !c.parentId);
@@ -234,9 +240,10 @@ export function ReviewPanel({
     setError(null);
     if (!text.trim()) return setError('コメントを入力してください');
     try {
-      await post(`${base}/versions/${v.id}/comments`, { body: text, pin: draftPin, parentId: replyTo?.id ?? null });
+      await post(`${base}/versions/${v.id}/comments`, { body: text, pin: draftPin, pinType: draftPin ? pinType : null, parentId: replyTo?.id ?? null });
       setText('');
       setDraftPin(null);
+      setPinType('change');
       setAdding(false);
       setReplyTo(null);
       toast('コメントを送信しました');
@@ -250,7 +257,12 @@ export function ReviewPanel({
     <div key={c.id} className={`comment ${isReply ? 'reply' : ''}`} id={`c-${c.id}`} style={focusId === c.id ? { background: 'var(--primary-soft)' } : undefined}>
       <div className="row between">
         <div className="who">
-          {c.pin && <span className={`pinnum ${c.resolved ? 'resolved' : ''}`}>{c.pin.number}</span>}
+          {c.pin && <span className={`pinnum ${c.resolved ? 'resolved' : ''} ${c.pin.type === 'keep' ? 'keep' : ''}`}>{c.pin.number}</span>}
+          {c.pin && !c.deleted && (
+            <span className={`badge ${c.pin.type === 'keep' ? 'info' : 'warn'}`} style={{ marginRight: 6 }} data-testid="pin-type">
+              {c.pin.typeLabel}
+            </span>
+          )}
           {c.authorName}
           <span className="badge" style={{ marginLeft: 6 }}>
             {c.authorType === 'operator' ? '制作側' : 'お客様'}
@@ -260,13 +272,14 @@ export function ReviewPanel({
       </div>
       {editing?.id === c.id ? (
         <div>
-          <textarea value={editing.body} onChange={(e) => setEditing({ id: c.id, body: e.target.value })} aria-label="コメントを編集" />
+          {editing.pinType && <PinTypeChips value={editing.pinType} onChange={(t) => setEditing({ ...editing, pinType: t })} />}
+          <textarea value={editing.body} onChange={(e) => setEditing({ ...editing, id: c.id, body: e.target.value })} aria-label="コメントを編集" />
           <div className="row">
             <AsyncButton
               className="btn small primary"
               onClick={async () => {
                 try {
-                  await patch(`${base}/comments/${c.id}`, { body: editing.body });
+                  await patch(`${base}/comments/${c.id}`, editing.pinType ? { body: editing.body, pinType: editing.pinType } : { body: editing.body });
                   setEditing(null);
                   onChanged();
                 } catch (e) {
@@ -310,7 +323,7 @@ export function ReviewPanel({
           )}
           {c.mine && (
             <>
-              <button className="btn ghost small" onClick={() => setEditing({ id: c.id, body: c.body })}>
+              <button className="btn ghost small" onClick={() => setEditing({ id: c.id, body: c.body, pinType: c.pin?.type })}>
                 編集
               </button>
               <AsyncButton
@@ -406,6 +419,11 @@ export function ReviewPanel({
           ⬇ ダウンロード（{fmtSize(v.file.size)}）
         </a>
         <span className="muted small">{v.file.name}</span>
+        {canPin && sheetPath && (
+          <Link className="btn small" to={sheetPath(v.id)} data-testid="sheet-open">
+            📝 修正指示書（Client Portal 修正指示）
+          </Link>
+        )}
       </div>
 
       {actions?.(v)}
@@ -419,6 +437,11 @@ export function ReviewPanel({
                 {fmtDate(c.createdAt)} {c.clientName}
               </div>
               <div className="pre">{c.body}</div>
+              {sheetPath && c.pinCount > 0 && (
+                <Link className="btn small ghost" to={sheetPath(v.id, c.id)}>
+                  📝 この依頼の修正指示書（ピン{c.pinCount}件）
+                </Link>
+              )}
             </div>
           ))}
         </div>
@@ -477,10 +500,29 @@ export function ReviewPanel({
           )}
           {draftPin && (
             <div className="alert small">
-              📍 ピン位置を指定しました。コメントを書いて送信してください。
+              📍 ピン位置を指定しました。指示タイプを選び、内容を書いて送信してください。
               <button className="btn ghost small" onClick={() => setDraftPin(null)}>
                 ピンを外す
               </button>
+              <div style={{ marginTop: 6 }}>
+                <PinTypeChips value={pinType} onChange={setPinType} />
+              </div>
+              <div className="chips" style={{ marginTop: 6 }} aria-label="定型文">
+                {PIN_PRESETS.map((ps) => (
+                  <button
+                    key={ps.text}
+                    type="button"
+                    className="chip"
+                    onClick={() => {
+                      // 元ツールと同じく、入力中の文に定型文を続け、指示タイプも合わせる（shared/correctionSheet.ts）
+                      setText((t) => applyPreset(t, ps.text));
+                      setPinType(ps.type);
+                    }}
+                  >
+                    {ps.text}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <label className="field" style={{ marginBottom: 6 }}>
@@ -500,6 +542,27 @@ export function ReviewPanel({
           </AsyncButton>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Client Portal 修正指示: ピンの指示タイプ選択（変更/削除/追加/移動/変更しない/その他） */
+export function PinTypeChips({ value, onChange }: { value: PinType; onChange: (t: PinType) => void }) {
+  return (
+    <div className="chips" role="radiogroup" aria-label="指示タイプ">
+      {PIN_TYPES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="radio"
+          aria-checked={value === t.id}
+          className={`chip ${t.id === 'keep' ? 'keep' : ''} ${value === t.id ? 'on' : ''}`}
+          onClick={() => onChange(t.id)}
+          data-testid={`pintype-${t.id}`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }

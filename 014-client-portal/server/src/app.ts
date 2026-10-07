@@ -19,6 +19,8 @@ import { deliveryRoutes } from './routes/app-deliveries.js';
 import { miscRoutes } from './routes/app-misc.js';
 import { portalRoutes } from './routes/portal.js';
 import { fileRoutes } from './routes/files.js';
+import { selectionRoutes } from './routes/selections.js';
+import { correctionRoutes } from './routes/corrections.js';
 import { startJobs } from './jobs.js';
 
 declare module 'fastify' {
@@ -148,6 +150,8 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
   await app.register(miscRoutes);
   await app.register(portalRoutes);
   await app.register(fileRoutes);
+  await app.register(selectionRoutes);
+  await app.register(correctionRoutes);
 
   app.setNotFoundHandler((req, reply) => {
     if (req.url.startsWith('/api/')) return reply.status(404).send({ error: 'not_found', message: '見つかりません' });

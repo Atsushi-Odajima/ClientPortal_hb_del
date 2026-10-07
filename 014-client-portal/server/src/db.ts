@@ -39,10 +39,23 @@ export function migrate(db: DB): void {
     const version = Number(f.split('_')[0]);
     if (applied.has(version)) continue;
     const sql = fs.readFileSync(path.join(dir, f), 'utf8');
-    db.transaction(() => {
-      db.exec(sql);
-      db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());
-    })();
+    // テーブル作り直し（CHECK制約の変更など）を含むマイグレーションは SQLite 推奨手順に従い
+    // 外部キーを一時的に無効化して実行し、コミット前に foreign_key_check で整合性を確認する
+    const fkOff = /^--\s*migrate:foreign-keys-off/m.test(sql);
+    const fkWasOn = (db.pragma('foreign_keys', { simple: true }) as number) === 1;
+    if (fkOff && fkWasOn) db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(sql);
+        if (fkOff) {
+          const bad = db.prepare('PRAGMA foreign_key_check').all();
+          if (bad.length > 0) throw new Error(`migration ${f}: foreign key check failed (${bad.length})`);
+        }
+        db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());
+      })();
+    } finally {
+      if (fkOff && fkWasOn) db.pragma('foreign_keys = ON');
+    }
   }
 }
 

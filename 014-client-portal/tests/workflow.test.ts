@@ -132,7 +132,7 @@ describe('コメント・画像ピン・修正依頼', () => {
     const pins = cs.filter((c: { pin: unknown }) => c.pin);
     expect(pins).toHaveLength(2);
     // 相対座標がそのまま保存・返却される（画面サイズ非依存）
-    expect(pins[1].pin).toEqual({ x: 0.81234, y: 0.9, number: 2 });
+    expect(pins[1].pin).toEqual({ x: 0.81234, y: 0.9, number: 2, type: 'change', typeLabel: '変更' });
     const deleted = cs.find((c: { id: string }) => c.id === c1.body.id);
     expect(deleted).toMatchObject({ deleted: true, body: '', edited: true });
     expect(cs.find((c: { id: string }) => c.id === reply.body.id).resolved).toBe(true);

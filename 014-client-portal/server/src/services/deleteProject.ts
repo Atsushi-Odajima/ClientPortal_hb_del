@@ -19,6 +19,11 @@ export async function deleteProjectCompletely(ctx: Ctx, p: ProjectRow, actor: Ac
     db.prepare('DELETE FROM deliverable_versions WHERE project_id = ?').run(p.id);
     db.prepare('DELETE FROM deliverables WHERE project_id = ?').run(p.id);
     db.prepare('DELETE FROM uploads WHERE project_id = ?').run(p.id);
+    // Client Portal 写真セレクト（files より先に削除: selection_photos.file_id が files を参照）
+    db.prepare('DELETE FROM selection_picks WHERE set_id IN (SELECT id FROM selection_sets WHERE project_id = ?)').run(p.id);
+    db.prepare('DELETE FROM selection_responses WHERE set_id IN (SELECT id FROM selection_sets WHERE project_id = ?)').run(p.id);
+    db.prepare('DELETE FROM selection_photos WHERE project_id = ?').run(p.id);
+    db.prepare('DELETE FROM selection_sets WHERE project_id = ?').run(p.id);
     db.prepare('DELETE FROM files WHERE project_id = ?').run(p.id);
     db.prepare('DELETE FROM document_requests WHERE project_id = ?').run(p.id);
     db.prepare('DELETE FROM invites WHERE access_id IN (SELECT id FROM portal_access WHERE project_id = ?)').run(p.id);
